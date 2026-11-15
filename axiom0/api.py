@@ -12,7 +12,7 @@ from .llm import OllamaMind, LocalMindError
 from .store import IntegrityError
 from .intention369 import IntentionLab
 
-app = FastAPI(title='AXIOM0 Living City',version='0.6.0',docs_url=None,redoc_url=None)
+app = FastAPI(title='AXIOM0 Living City',version='0.6.1',docs_url=None,redoc_url=None)
 
 
 @lru_cache(maxsize=1)
@@ -168,7 +168,7 @@ def home():
 
 @app.get('/health')
 def health():
-    return {'status':'ok','version':'0.6.0','authenticated_status_requires_key':True}
+    return {'status':'ok','version':'0.6.1','authenticated_status_requires_key':True}
 
 
 @app.get('/v1/status',dependencies=[Depends(service_key)])

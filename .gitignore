@@ -12,3 +12,5 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# Pi 5 hardware profiles are public settings, not secrets
+!deploy/pi5/profiles/*.env

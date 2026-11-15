@@ -1,3 +1,29 @@
+# AXIOM0 Living City v0.6.1 — Raspberry Pi 5 Edition — 2026-11-15
+
+## Added
+- `deploy/pi5/install.sh`: one-command Raspberry Pi 5 appliance install. It sets up AXIOM0 in
+  `/opt/axiom0` under a sandboxed `axiom0` service account, installs Ollama with a Pi 5 tuning
+  drop-in (localhost only, 1 request, 1 model, flash attention, 8-bit KV cache), and
+  downloads and preloads the model. Optional zram and CPU governor. Includes `--dry-run`.
+- RAM profiles `pi5-4gb` (llama3.2:1b), `pi5-8gb` (llama3.2:3b), `pi5-16gb` (llama3.2:3b, always loaded).
+- systemd units `axiom0.service` (hardened sandbox, CPU priority over Ollama) and `axiom0-warmup.service`.
+- `axiom0-pi5-doctor.sh` (power, thermals, storage, Ollama, AXIOM0, localhost-only checks, ledger),
+  `axiom0-pi5-bench.sh` (tokens/s and answer-time estimate against the configured timeout), `uninstall.sh`.
+- `docs/PI5.md` operator guide.
+
+## Changed
+- `axiom0/llm.py`: optional, validated tuning settings: `AXIOM0_LLM_TIMEOUT`, `AXIOM0_LLM_SOURCES`,
+  `AXIOM0_NUM_CTX`, `AXIOM0_NUM_THREAD`, `AXIOM0_NUM_PREDICT`, `AXIOM0_KEEP_ALIVE`. When they are
+  unset, behaviour is identical to v0.6. Timeouts now report a specific error naming the setting
+  to change, instead of "Could not reach local Ollama".
+
+## Verification
+- 40 automated tests pass (13 new). All scripts pass shellcheck. A full install, re-install,
+  ingest, ask --llm, doctor, speed test and uninstall were exercised on Linux with Ollama and
+  systemd stand-ins. Not yet run on physical Pi 5 hardware.
+
+---
+
 # AXIOM0 Living City v0.6 Release Notes — 2026-11-15
 
 ## Preserved

@@ -1,4 +1,4 @@
-# AXIOM0 Living City v0.6 — SemiSoul / 3·6·9 Local Pilot
+# AXIOM0 Living City v0.6.1 — SemiSoul / 3·6·9 Local Pilot · Raspberry Pi 5 Edition
 
 **Author and concept originator: Howard Rice**  
 **Build status:** local pilot reference implementation; **not** certified for production, not an official City of Kansas City, Missouri system.  
@@ -40,6 +40,15 @@ The resulting municipal purpose is practical: preserve the source, keep every ve
 * **9 steps:** capture → identify source → timestamp → contextualize → hypothesize → seek support → seek counterevidence → human review → reassess.
 
 Use `axiom0 inquire369 HYPOTHESIS_ID` after adding occurrences and opening a hypothesis. It **cannot** change a hypothesis to verified. The 3·6·9 intention practice is a separate personal goal-tracking workflow and cannot influence a legal finding.
+
+## Quick start — Raspberry Pi 5 (with local AI model)
+
+```bash
+sudo bash deploy/pi5/install.sh
+```
+
+Installs AXIOM0 and Ollama, picks a model to suit the board's RAM, tunes both for the Pi 5, and starts
+everything as local-only services. Full guide: [`docs/PI5.md`](docs/PI5.md).
 
 ## Quick start — Windows PowerShell
 
