@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AXIOM0 / Living City · 3-6-9 Intention Lab</title>
+<style>
+:root{font-family:Inter,"Segoe UI",system-ui,sans-serif;color-scheme:dark;--bg:#081017;--panel:#101d28;--line:#28404e;--ink:#e6f4f6;--muted:#99b0bc;--teal:#4fe2bc;--orange:#f6c575}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -10%,#16374a 0%,var(--bg) 50%);color:var(--ink)}.shell{max-width:1200px;margin:auto;padding:28px 22px 64px}header{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:24px}.brand{letter-spacing:.16em;font-size:25px;font-weight:800}.brand em{font-style:normal;color:var(--teal)}.eyebrow{color:var(--teal);letter-spacing:.2em;text-transform:uppercase;font-size:11px;font-weight:700}h1{font-size:clamp(27px,5vw,50px);letter-spacing:-.04em;line-height:1.09;margin:16px 0}h2{font-size:18px;margin:0 0 14px}h3{font-size:15px}p{color:var(--muted);line-height:1.5}.hero{padding:32px 0 20px;max-width:930px}.hero p{font-size:16px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.metrics{margin:16px 0 28px}.metric{padding:19px;border:1px solid var(--line);background:#0c1b25;border-radius:16px}.metric b{display:block;font-size:31px;margin:8px 0}.metric small{color:var(--muted)}.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:20px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:20px}.panel h2{color:var(--ink)}.hint{font-size:13px;color:var(--muted)}.muted{color:var(--muted)}label{font-size:13px;color:#c7d9e0;display:block;margin:12px 0 6px}input,textarea,select,button{font:inherit}input,textarea,select{width:100%;background:#07151f;border:1px solid #355060;color:white;padding:11px 12px;border-radius:9px}textarea{min-height:83px;resize:vertical}input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}button{background:var(--teal);color:#06231c;border:0;border-radius:9px;padding:10px 15px;font-weight:700;cursor:pointer}button.secondary{color:var(--ink);border:1px solid var(--line);background:#1b3340}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.row>div{flex:1 1 150px}.tag{display:inline-block;border:1px solid #496068;padding:3px 8px;border-radius:100px;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.tag.candidate{color:var(--orange)}.tag.verified{color:var(--teal)}.item{padding:12px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.item:first-child{border-top:0}.item strong{display:block;padding-bottom:4px}.small{font-size:12px;color:var(--muted)}.message{min-height:22px;color:#ffd79d;margin:10px 0;white-space:pre-wrap}.answer{padding:14px;background:#071923;border:1px solid #325260;border-radius:12px;white-space:pre-wrap;line-height:1.5}.footer{font-size:12px;color:var(--muted);margin-top:28px}.warning{border-left:3px solid var(--orange);padding:9px 13px;background:#372b1c50;color:#ffdcaa;border-radius:3px}.progress{color:var(--teal)}.scroll{max-height:490px;overflow:auto}.hint strong{color:#bce5e0}.daystrip{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:6px;margin:13px 0}.dayunit{font-size:12px;text-align:center;background:#071923;border:1px solid var(--line);border-radius:9px;padding:10px 3px}.dayunit.complete{border-color:var(--teal);color:var(--teal)}.dayunit.today{outline:2px solid var(--orange)}.dayunit b{display:block;font-size:14px}.subgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}@media(max-width:850px){.subgrid{grid-template-columns:1fr}.daystrip{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.layout,.grid{grid-template-columns:1fr}.shell{padding:20px 14px}.hero{padding-top:22px}}
+</style>
+</head>
+<body><main class="shell">
+<header><div><div class="eyebrow">Persistent Intelligence / Municipal Edition</div><div class="brand">AXIOM<em>0</em> <span style="color:#97b9c3;font-size:13px;letter-spacing:.09em">LIVING CITY</span></div></div><div class="row"><span id="connected" class="tag">Offline / Locked</span><button class="secondary" id="reload">Refresh data</button></div></header>
+<section class="hero"><div class="eyebrow">Observe → Investigate → Corroborate → Human Review</div><h1>Intelligence rooted in evidence.<br>Awareness before certainty.</h1><p>AXIOM0 records occurrences as they happen, connects relevant sources and maintains hypotheses until people can responsibly evaluate them. The model is replaceable. Identity and memory remain rooted.</p><div class="warning">Prototype. Indicators are not proof, predictions of wrongdoing, legal findings or city-approved conclusions. No official Kansas City records are included.</div></section>
+<section class="panel"><h2>Operator access</h2><div class="row"><div><label for="token">Local API key (kept in this page's memory only)</label><input id="token" type="password" autocomplete="off" placeholder="AXIOM0_API_KEY"></div><button id="connect">Connect locally</button></div><div id="global-message" class="message" role="status" aria-live="polite"></div></section>
+<section class="grid metrics"><div class="metric"><small>Imported authorities / records</small><b id="num-docs">—</b><small>Source-versioned documents</small></div><div class="metric"><small>Observed occurrences</small><b id="num-occ">—</b><small>Attributed reported events</small></div><div class="metric"><small>Active hypotheses</small><b id="num-hyp">—</b><small>Pending investigation / review</small></div></section>
+<section class="layout"><div>
+ <div class="panel"><h2>Occurrence intake</h2><p class="hint">Use aggregate service-area events only. Do not add dossiers about identifiable individuals.</p><form id="occ-form">
+ <div class="row"><div><label for="external">Source record ID</label><input id="external" required maxlength="200" placeholder="report-1042"></div><div><label for="event-at">Event time</label><input id="event-at" type="datetime-local" required></div></div>
+ <div class="row"><div><label for="area">Service area</label><input id="area" required placeholder="Example Area"></div><div><label for="category">Category</label><input id="category" required placeholder="Storm drain reports"></div></div>
+ <label for="summary">Observed details (not speculation)</label><textarea id="summary" required></textarea>
+ <div class="row"><div><label for="source">Source label</label><input id="source" required placeholder="Public service log A"></div><div><label for="url">Source URL / internal reference</label><input id="url" required placeholder="local://operator-submitted"></div></div>
+ <label for="quality">Evidence limitations / confidence note</label><input id="quality" required placeholder="Unverified report; location aggregation only"><div class="row" style="margin-top:14px"><button type="submit">Record occurrence</button><span id="save-msg" role="status" class="small"></span></div></form></div>
+ <div class="panel"><h2>Emerging signals</h2><p class="hint">Deterministic default: 3 reports within 30 days, from at least 2 distinct source labels. Distinct labels do not prove independent corroboration.</p><button id="scan">Scan and revisit signals</button><div id="signals" class="scroll" aria-live="polite"><p class="hint">Connect to load signals.</p></div></div>
+ <div class="panel"><h2>Hypothesis review queue</h2><div id="hypotheses" class="scroll"><p class="hint">No findings loaded.</p></div></div>
+</div><div>
+ <div class="panel"><h2>Local Municipal Research Mind</h2><p class="hint">Uses only imported documents retrieved locally. An Ollama model must be installed to produce answers.</p><label for="question">Ask a source-grounded question</label><textarea id="question" placeholder="What legal sources apply to ... ?"></textarea><div style="margin:12px 0"><button id="ask">Ask local Mind</button></div><div id="answer" class="answer" role="status">No research output yet.</div></div>
+ <div class="panel"><h2>Recent occurrences</h2><div id="occur-list" class="scroll"><p class="hint">No records loaded.</p></div></div>
+ <div class="panel"><h2>Persistent identity</h2><div class="small">SemiSoul ID</div><div class="answer" id="semisoul">—</div><p class="hint">An Ed25519 signing key anchors the audit history. Model swaps do not change this identity. Full rollback protection and production user authorization require additional infrastructure.</p><button id="verify" class="secondary">Verify audit ledger</button><div id="verification" class="message" aria-live="polite"></div></div>
+</div></section>
+<section class="panel" id="intention-lab" aria-labelledby="intention-title">
+ <div class="eyebrow">Optional reflection protocol / Separate from municipal evidence</div>
+ <h2 id="intention-title">3 · 6 · 9 Intention Lab</h2>
+ <p class="hint">Repeat an affirmation <strong>3 times</strong> per session, log up to <strong>6 sessions</strong> per day, for <strong>9 consecutive days</strong>. Set a measurable objective, take real actions, and record observed results. A completed practice is not evidence that numerical repetition caused an outcome.</p>
+ <div class="subgrid"><div>
+  <h3>Start a nine-day practice</h3>
+  <form id="intention-form">
+   <label for="goal369">Specific goal</label><input id="goal369" required maxlength="300" placeholder="Improve neighborhood research turnaround time">
+   <label for="affirmation369">Affirmation</label><textarea id="affirmation369" required maxlength="500" placeholder="I consistently take clear, measurable steps toward this goal"></textarea>
+   <label for="metric369">Measurable metric (unit)</label><input id="metric369" required maxlength="120" placeholder="Minutes per research request">
+   <div class="row"><div><label for="baseline369">Baseline</label><input id="baseline369" type="number" required step="any" placeholder="60"></div><div><label for="target369">Target</label><input id="target369" type="number" required step="any" placeholder="30"></div></div>
+   <div class="row"><div><label for="start369">Start date (optional)</label><input id="start369" type="date"></div><div><label for="zone369">IANA timezone</label><input id="zone369" value="America/Chicago" required></div></div>
+   <div style="margin-top:14px"><button type="submit">Create intention</button></div>
+   <div class="message" id="intention-message" role="status" aria-live="polite"></div>
+  </form>
+ </div><div>
+  <h3>Track your current practice</h3>
+  <label for="intention-choice">Select an intention</label><select id="intention-choice"><option value="">No intentions loaded</option></select>
+  <div id="intention-detail" class="answer" role="status">Connect to view progress.</div>
+  <div id="day-progress" class="daystrip" aria-label="Nine-day progress"></div>
+  <form id="intention-session-form">
+   <label for="action369">Concrete action taken (optional)</label><textarea id="action369" maxlength="1000" placeholder="Prepared an outreach list and contacted three sources"></textarea>
+   <label for="reflection369">Reflection (optional)</label><input id="reflection369" maxlength="1000" placeholder="What did you learn or notice?">
+   <label><input id="attested369" type="checkbox" required style="width:auto;margin-right:6px">I personally completed 3 repetitions in this session</label>
+   <button type="submit">Record this session</button>
+  </form>
+  <form id="intention-outcome-form" style="margin-top:20px">
+   <h3>Record an observed outcome</h3>
+   <label for="value369">Measured value</label><input id="value369" required type="number" step="any" placeholder="Current value in your selected unit">
+   <label for="source369">Evidence source / reference (optional)</label><input id="source369" maxlength="1500" placeholder="local://self-report or source record">
+   <label for="note369">Observation note</label><input id="note369" maxlength="1500" placeholder="Describe how the number was measured">
+   <div style="margin-top:12px"><button type="submit" class="secondary">Record outcome</button></div>
+  </form>
+  <div id="intention-log" class="scroll" aria-live="polite"></div>
+ </div></div>
+ <p class="warning">The 3-6-9 routine is a reflective goal-setting tool, not a scientific manifestation mechanism or a municipal prediction model. Self-reports are recorded honestly, not verified automatically.</p>
+</section>
+
+<div class="footer">AXIOM0 Living City v0.4 • Local-first research prototype • No automated citations, penalties, enforcement or irreversible actions • Evidence and model output must be reviewed by authorized staff.</div>
+</main>
+<script>
+let key='';
+const $=id=>document.getElementById(id);
+const text=(node,value)=>node.textContent=String(value);
+const div=(cls)=>{const el=document.createElement('div');el.className=cls;return el};
+function child(parent,tag,content,cls){const node=document.createElement(tag);if(cls)node.className=cls;text(node,content);parent.appendChild(node);return node}
+async function api(path,method='GET',payload){
+ const res=await fetch(path,{method,headers:{'X-AXIOM0-Key':key,...(payload?{'Content-Type':'application/json'}:{})},body:payload?JSON.stringify(payload):undefined});
+ let data;try{data=await res.json()}catch{throw Error('Invalid server response')}
+ if(!res.ok)throw Error(typeof data.detail==='string'?data.detail:'Request failed '+res.status);
+ return data;
+}
+function show(id,error){text($(id),error instanceof Error?error.message:error)}
+function showList(id,items,renderer){const root=$(id);root.replaceChildren();if(!items.length){child(root,'p','No records yet.','hint');return}items.forEach(item=>{const node=div('item');renderer(node,item);root.appendChild(node)})}
+async function refresh(){
+ try{
+  const [status,occ,hyp]=await Promise.all([api('/v1/status'),api('/v1/occurrences'),api('/v1/hypotheses')]);
+  text($('connected'),'Local / Connected');$('connected').style.color='var(--teal)';
+  text($('num-docs'),status.stats.documents);text($('num-occ'),status.stats.occurrences);text($('num-hyp'),status.stats.hypotheses);
+  text($('semisoul'),status.identity.semisoul_id);
+  await refreshIntentions();
+  showList('occur-list',occ.slice(0,15),(root,e)=>{child(root,'strong',e.category+' · '+e.area);child(root,'div',e.summary);child(root,'div',e.event_at+' | '+e.source_label,'small')});
+  showList('hypotheses',hyp.slice(0,25),(root,h)=>{child(root,'strong',h.claim);child(root,'span',h.status,'tag '+h.status);child(root,'div',h.evidence.length+' occurrence(s), '+h.source_label_count+' labeled source(s) · '+h.id,'small')});
+  show('global-message','Connected to local AXIOM0.');
+ }catch(e){show('global-message',e);text($('connected'),'Offline / Locked')}
+}
+$('connect').onclick=()=>{key=$('token').value.trim();$('token').value='';refresh()};
+$('reload').onclick=refresh;
+$('occ-form').onsubmit=async e=>{
+ e.preventDefault();try{const time=new Date($('event-at').value);if(!Number.isFinite(time.valueOf()))throw Error('Enter a valid event time');
+ const result=await api('/v1/occurrences','POST',{external_id:$('external').value.trim(),event_at:time.toISOString(),area:$('area').value.trim(),category:$('category').value.trim(),summary:$('summary').value.trim(),source_label:$('source').value.trim(),source_url:$('url').value.trim(),confidence_note:$('quality').value.trim()});
+ show('save-msg',result.duplicate?'Already recorded':'Saved '+result.id.slice(0,8));$('occ-form').reset();refresh()
+ }catch(err){show('save-msg',err)}
+};
+$('scan').onclick=async()=>{try{const entries=await api('/v1/signals','POST');showList('signals',entries,(root,s)=>{child(root,'strong',s.category+' · '+s.area);child(root,'span',s.status,'tag candidate');child(root,'div',s.report_count+' reports from '+s.distinct_source_labels+' labeled sources','small');child(root,'div','Flag only — evidence and independence require review.','small')});await refresh()}catch(err){show('global-message',err)}};
+$('ask').onclick=async()=>{text($('answer'),'Consulting local source index…');try{const a=await api('/v1/ask','POST',{question:$('question').value.trim()});text($('answer'),a.answer+'\n\nCited local source IDs: '+a.cited_source_ids.join(', ')+'\n\nUncertainties: '+a.uncertainties.join(' | ')+'\n\nStatus: '+a.classification)}catch(err){show('answer',err)}};
+$('verify').onclick=async()=>{try{const a=await api('/v1/verify');show('verification','Verified '+a.verified_events+' local events. Head '+a.head.slice(0,16)+'…')}catch(err){show('verification',err)}};
+let intentionsCache=[];
+async function refreshIntentions(preferredId){
+ const records=await api('/v1/369/intentions');intentionsCache=records;
+ const picker=$('intention-choice'), old=preferredId||picker.value;
+ picker.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent='Select an intention';picker.appendChild(empty);
+ records.forEach(record=>{const option=document.createElement('option');option.value=record.id;option.textContent=record.goal+' · '+record.start_date;picker.appendChild(option)});
+ if(records.some(x=>x.id===old))picker.value=old;
+ else if(records.length)picker.value=records[0].id;
+ renderIntention();
+}
+function renderIntention(){
+ const selected=intentionsCache.find(x=>x.id===$('intention-choice').value);
+ $('day-progress').replaceChildren();$('intention-log').replaceChildren();
+ if(!selected){text($('intention-detail'),'No intention selected. Create one to begin.');return}
+ const state=selected.practice_complete?'All 54 sessions self-reported':selected.window_closed?'Nine-day window closed':selected.current_day?'Day '+selected.current_day+' of 9':'Scheduled to begin';
+ text($('intention-detail'),selected.goal+'\n'+selected.affirmation+'\n\n'+state+' · '+selected.completed_sessions+'/54 sessions · '+selected.completed_repetitions+'/162 repetitions\n'+selected.metric+': baseline '+selected.baseline+' → target '+selected.target+(selected.latest_observed_value===null?'':' · latest observed '+selected.latest_observed_value));
+ selected.days.forEach(day=>{let d=div('dayunit'+(day.complete?' complete':'')+(selected.current_day===day.day?' today':''));child(d,'b',String(day.day));child(d,'span',day.sessions+'/6');d.title=day.date;$('day-progress').appendChild(d)});
+ const last=selected.outcomes.slice(-5).reverse();
+ if(last.length){child($('intention-log'),'h3','Recent outcome observations');last.forEach(record=>{const r=div('item');child(r,'strong',record.value+' '+selected.metric);child(r,'div',record.observed_at,'small');if(record.note)child(r,'div',record.note);$('intention-log').appendChild(r)})}
+}
+$('intention-choice').onchange=renderIntention;
+$('intention-form').onsubmit=async e=>{
+ e.preventDefault();try{
+  const res=await api('/v1/369/intentions','POST',{
+   goal:$('goal369').value.trim(),affirmation:$('affirmation369').value.trim(),
+   metric:$('metric369').value.trim(),baseline:Number($('baseline369').value),
+   target:Number($('target369').value),
+   start_date:$('start369').value||null,timezone_name:$('zone369').value.trim()});
+  text($('intention-message'),'Created '+res.id.slice(0,8)+' — keep the practice connected to real actions.');
+  $('intention-form').reset();$('zone369').value='America/Chicago';await refreshIntentions(res.id);
+ }catch(err){show('intention-message',err)}
+};
+$('intention-session-form').onsubmit=async e=>{
+ e.preventDefault();const id=$('intention-choice').value;if(!id){show('intention-message','Select an intention first.');return}
+ try{
+  await api('/v1/369/intentions/'+encodeURIComponent(id)+'/sessions','POST',{
+   repetitions:3,action_taken:$('action369').value.trim(),reflection:$('reflection369').value.trim()});
+  $('intention-session-form').reset();show('intention-message','Session self-report recorded.');await refreshIntentions(id);
+ }catch(err){show('intention-message',err)}
+};
+$('intention-outcome-form').onsubmit=async e=>{
+ e.preventDefault();const id=$('intention-choice').value;if(!id){show('intention-message','Select an intention first.');return}
+ try{
+  await api('/v1/369/intentions/'+encodeURIComponent(id)+'/outcomes','POST',{
+   value:Number($('value369').value),source_reference:$('source369').value.trim(),note:$('note369').value.trim()});
+  $('intention-outcome-form').reset();show('intention-message','Observation recorded; causation is not established.');await refreshIntentions(id);
+ }catch(err){show('intention-message',err)}
+};
+
+</script>
+</body></html>

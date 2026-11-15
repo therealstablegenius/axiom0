@@ -1,0 +1,14 @@
+.venv/
+axiom0_data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.ed25519
+*.env
+*.secrets*
+__pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+dist/
+build/
