@@ -6,7 +6,7 @@
 
 ## The story behind AXIOM0
 
-Howard Rice describes a career spent where residents' questions, legislative records, public meetings, and administrative accountability intersect: Kansas City's City Clerk's Office. He has supported committee and commission work, researched municipal matters, and seen how a resident's concern can disappear between intake, assignment, research, decision, and follow-through. Alongside that work, Rice has studied cybersecurity and developed software concepts that bring mathematical structure and human judgment into public-service workflows.
+Howard Rice's career has been spent where residents' questions, legislative records, public meetings, and administrative accountability intersect: Kansas City's City Clerk's Office. He has supported committee and commission work, researched municipal matters, and seen how a resident's concern can disappear between intake, assignment, research, decision, and follow-through. Alongside that work, Rice has studied cybersecurity and developed software concepts that bring mathematical structure and human judgment into public-service workflows.
 
 AXIOM0 began with mathematical and philosophical questions: Can a numerical language represent a system's condition? Can an intelligent agent retain a durable identity when its model changes? Can an accountability system preserve the memory of what it knew, what it did, and what it later corrected? And can that system search for truth **before proof has been assembled** without ever pretending the missing proof exists?
 
