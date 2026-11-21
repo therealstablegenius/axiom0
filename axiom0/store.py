@@ -104,6 +104,23 @@ CREATE TABLE IF NOT EXISTS mind_history (
   purpose TEXT NOT NULL, changed_at TEXT NOT NULL);
 """
 
+# Schema versioning. SCHEMA above is the v1 baseline and is never edited; every later
+# change is an ordered, append-only migration recorded in the signed ledger.
+SCHEMA_VERSION = 4
+MIGRATIONS: dict[int, tuple[str, list[str]]] = {
+    2: ('mind_history: rename column purpose -> reason (it always stored the swap reason)',
+        ['ALTER TABLE mind_history RENAME COLUMN purpose TO reason']),
+    3: ('reviewers: personal reviewer identities with hashed keys',
+        ['''CREATE TABLE IF NOT EXISTS reviewers (
+              name TEXT PRIMARY KEY, key_sha256 TEXT NOT NULL UNIQUE,
+              enrolled_at TEXT NOT NULL, enrolled_by TEXT NOT NULL,
+              revoked_at TEXT, revoked_by TEXT)''']),
+    4: ('ledger_anchors: record of signed head receipts issued for external anchoring',
+        ['''CREATE TABLE IF NOT EXISTS ledger_anchors (
+              receipt_sha256 TEXT PRIMARY KEY, seq INTEGER NOT NULL,
+              head TEXT NOT NULL, created_at TEXT NOT NULL)''']),
+}
+
 
 class IntegrityError(RuntimeError):
     pass
@@ -123,7 +140,40 @@ class Store:
             if not found:
                 conn.execute('INSERT INTO metadata(key,value) VALUES(?,?)', ('identity_id', self.identity.id))
                 conn.commit()
+        # Verify history before changing anything, then bring the schema up to date.
         self.verify_ledger()
+        self.migrate()
+
+    def schema_version(self) -> int:
+        with self.connect() as conn:
+            row = conn.execute('SELECT value FROM metadata WHERE key=?', ('schema_version',)).fetchone()
+        return int(row['value']) if row else 1
+
+    def migrate(self) -> list[dict]:
+        """Apply pending migrations in order, each atomic with a signed ledger event."""
+        applied = []
+        current = self.schema_version()
+        if current > SCHEMA_VERSION:
+            raise IntegrityError(f'Database schema v{current} is newer than this AXIOM0 (v{SCHEMA_VERSION}); '
+                                 'refusing to run an older program against newer data')
+        for version in range(current + 1, SCHEMA_VERSION + 1):
+            description, statements = MIGRATIONS[version]
+            with self.write() as conn:
+                found = conn.execute('SELECT value FROM metadata WHERE key=?', ('schema_version',)).fetchone()
+                if found and int(found['value']) >= version:
+                    continue  # another process migrated first
+                for sql in statements:
+                    conn.execute(sql)
+                conn.execute('INSERT INTO metadata(key,value) VALUES(?,?) '
+                             'ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                             ('schema_version', str(version)))
+                # A brand-new, empty ledger has no history to attest; it simply starts at the
+                # current schema. Existing ledgers get a signed record of every migration.
+                if conn.execute('SELECT 1 FROM events LIMIT 1').fetchone():
+                    self.append(conn, 'schema_migrated', {'from': version - 1, 'to': version,
+                                                          'description': description})
+            applied.append({'to': version, 'description': description})
+        return applied
 
     @contextmanager
     def connect(self):

@@ -107,6 +107,7 @@ def test_369_api_auth_and_session_records(tmp_path,monkeypatch):
     monkeypatch.setenv('AXIOM0_DATA_DIR',str(tmp_path))
     monkeypatch.setenv('AXIOM0_API_KEY','X'*48)
     monkeypatch.setenv('AXIOM0_REVIEWER_KEY','Y'*48)
+    monkeypatch.setenv('AXIOM0_ENABLE_SYMBOLIC','1')  # v0.7: optional module, enabled for this test
     core.cache_clear()
     try:
         client=TestClient(app)

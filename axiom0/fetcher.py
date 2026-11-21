@@ -1,8 +1,15 @@
 """Opt-in, allowlisted municipal source fetcher with ETag/TTL and signed audit.
 
 No crawling by default; no arbitrary URL ingestion exposed through the API.
-The registry is local-operator controlled. This is pilot security, not a
-network-isolated hardened crawler; review DNS rebinding and robots before scale.
+The registry is local-operator controlled.
+
+DNS rebinding (v0.7): the hostname is resolved once, every address is checked to
+be public, and the connection is then made to that exact validated address. TLS
+still verifies the certificate against the real hostname (SNI), so a DNS answer
+that changes between the check and the connection cannot redirect the request to
+a private or internal address. Rendered (browser) fetches pin the same address
+with Chromium's host-resolver rules. This is pilot security, not a
+network-isolated crawler; review robots/terms of use before scale.
 """
 from __future__ import annotations
 import asyncio
@@ -23,7 +30,7 @@ from .core import Axiom0
 from .store import now, digest, canonical
 
 MAX_BYTES=1_500_000
-USER_AGENT='AXIOM0-LivingCity/0.6 (+local-operator; read-only; opt-in feed)'
+USER_AGENT='AXIOM0-LivingCity/0.7 (+local-operator; read-only; opt-in feed)'
 
 
 def _atomic_json(path: Path, value: Any):
@@ -36,6 +43,11 @@ def _atomic_json(path: Path, value: Any):
 
 
 def _public_host(url: str, allowed_hosts: set[str], resolver: Callable | None = None) -> str:
+    return _resolve_public(url, allowed_hosts, resolver)[0]
+
+
+def _resolve_public(url: str, allowed_hosts: set[str], resolver: Callable | None = None) -> tuple[str, str]:
+    """Validate the URL and its DNS answer; return (hostname, one validated public IP to pin)."""
     parsed=urlparse(url)
     if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
         raise ValueError('Only public HTTPS URLs without credentials or fragments are accepted')
@@ -56,7 +68,14 @@ def _public_host(url: str, allowed_hosts: set[str], resolver: Callable | None = 
         ip=ipaddress.ip_address(ip_string)
         if not ip.is_global:
             raise PermissionError('Approved feed resolves to a non-public network address')
-    return host
+    return host, ip_values[0]
+
+
+def _pinned_url(url: str, ip: str) -> str:
+    """Same URL, with the hostname replaced by the validated IP literal."""
+    parsed=urlparse(url)
+    literal=f'[{ip}]' if ':' in ip else ip
+    return parsed._replace(netloc=literal).geturl()
 
 
 class _TextExtractor(HTMLParser):
@@ -158,12 +177,19 @@ class ResilientFetcher:
                                    'authority_claimed':authority,'render':bool(render)})
         return record
 
-    def _fetch_static(self, feed:dict, headers:dict) -> tuple[int,bytes,str,dict]:
+    def _fetch_static(self, feed:dict, headers:dict, pinned_ip:str|None=None) -> tuple[int,bytes,str,dict]:
         kwargs={'timeout':httpx.Timeout(25.0,connect=8.0),'follow_redirects':False,
                 'trust_env':False,'headers':headers}
         client=self.client or httpx.Client(**kwargs)
+        url=feed['url'];extensions={}
+        if pinned_ip:
+            # Connect to the address that was validated, never to a fresh DNS answer.
+            host=urlparse(url).hostname
+            url=_pinned_url(url,pinned_ip)
+            headers={**headers,'Host':host}
+            extensions={'sni_hostname':host}   # TLS SNI + certificate check use the real hostname
         try:
-            with client.stream('GET',feed['url'],headers=headers) as response:
+            with client.stream('GET',url,headers=headers,extensions=extensions) as response:
                 if response.status_code==304:
                     return 304,b'',response.headers.get('content-type',''),dict(response.headers)
                 if response.is_redirect: raise ValueError('Redirect refused; register reviewed canonical destination')
@@ -177,14 +203,18 @@ class ResilientFetcher:
         finally:
             if self.client is None: client.close()
 
-    def _fetch_browser(self, feed:dict) -> tuple[int,bytes,str,dict]:
+    def _fetch_browser(self, feed:dict, pinned_ip:str|None=None) -> tuple[int,bytes,str,dict]:
         # Opt-in only; network requests except the explicitly allowed hostname are blocked.
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as e:
             raise RuntimeError('Install AXIOM0[render], then playwright install chromium') from e
         with sync_playwright() as p:
-            browser=p.chromium.launch(headless=True)
+            args=[]
+            if pinned_ip:
+                literal=f'[{pinned_ip}]' if ':' in pinned_ip else pinned_ip
+                args.append(f"--host-resolver-rules=MAP {feed['allowed_host']} {literal}")
+            browser=p.chromium.launch(headless=True,args=args)
             try:
                 page=browser.new_page()
                 host=feed['allowed_host']
@@ -223,14 +253,15 @@ class ResilientFetcher:
             self._audit(report)
             return report
         try:
-            _public_host(feed['url'],{feed['allowed_host']},self.resolver)
+            _host,pinned_ip=_resolve_public(feed['url'],{feed['allowed_host']},self.resolver)
             if jitter_seconds:
                 if not 0<=jitter_seconds<=30: raise ValueError('Jitter must be in 0..30 seconds')
                 self.sleep_fn(random.uniform(0,jitter_seconds))
             headers={'User-Agent':USER_AGENT,'Accept':'text/html, text/plain, text/markdown, application/json'}
             if entry.get('etag') and not feed['render']: headers['If-None-Match']=entry['etag']
             if entry.get('last_modified') and not feed['render']: headers['If-Modified-Since']=entry['last_modified']
-            code,raw,media,hdr=(self._fetch_browser(feed) if feed['render'] else self._fetch_static(feed,headers))
+            code,raw,media,hdr=(self._fetch_browser(feed,pinned_ip) if feed['render']
+                                else self._fetch_static(feed,headers,pinned_ip))
             if code==304:
                 report={'feed_id':feed_id,'status':'http_not_modified','content_sha256':entry.get('content_hash'),'checked_at':stamp}
             else:

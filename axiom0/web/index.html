@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AXIOM0 / Living City · 3-6-9 Intention Lab</title>
+<title>AXIOM0 / Living City</title>
 <style>
 :root{font-family:Inter,"Segoe UI",system-ui,sans-serif;color-scheme:dark;--bg:#081017;--panel:#101d28;--line:#28404e;--ink:#e6f4f6;--muted:#99b0bc;--teal:#4fe2bc;--orange:#f6c575}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -10%,#16374a 0%,var(--bg) 50%);color:var(--ink)}.shell{max-width:1200px;margin:auto;padding:28px 22px 64px}header{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:24px}.brand{letter-spacing:.16em;font-size:25px;font-weight:800}.brand em{font-style:normal;color:var(--teal)}.eyebrow{color:var(--teal);letter-spacing:.2em;text-transform:uppercase;font-size:11px;font-weight:700}h1{font-size:clamp(27px,5vw,50px);letter-spacing:-.04em;line-height:1.09;margin:16px 0}h2{font-size:18px;margin:0 0 14px}h3{font-size:15px}p{color:var(--muted);line-height:1.5}.hero{padding:32px 0 20px;max-width:930px}.hero p{font-size:16px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.metrics{margin:16px 0 28px}.metric{padding:19px;border:1px solid var(--line);background:#0c1b25;border-radius:16px}.metric b{display:block;font-size:31px;margin:8px 0}.metric small{color:var(--muted)}.layout{display:grid;grid-template-columns:1.1fr .9fr;gap:20px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:20px}.panel h2{color:var(--ink)}.hint{font-size:13px;color:var(--muted)}.muted{color:var(--muted)}label{font-size:13px;color:#c7d9e0;display:block;margin:12px 0 6px}input,textarea,select,button{font:inherit}input,textarea,select{width:100%;background:#07151f;border:1px solid #355060;color:white;padding:11px 12px;border-radius:9px}textarea{min-height:83px;resize:vertical}input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}button{background:var(--teal);color:#06231c;border:0;border-radius:9px;padding:10px 15px;font-weight:700;cursor:pointer}button.secondary{color:var(--ink);border:1px solid var(--line);background:#1b3340}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.row>div{flex:1 1 150px}.tag{display:inline-block;border:1px solid #496068;padding:3px 8px;border-radius:100px;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.tag.candidate{color:var(--orange)}.tag.verified{color:var(--teal)}.item{padding:12px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.item:first-child{border-top:0}.item strong{display:block;padding-bottom:4px}.small{font-size:12px;color:var(--muted)}.message{min-height:22px;color:#ffd79d;margin:10px 0;white-space:pre-wrap}.answer{padding:14px;background:#071923;border:1px solid #325260;border-radius:12px;white-space:pre-wrap;line-height:1.5}.footer{font-size:12px;color:var(--muted);margin-top:28px}.warning{border-left:3px solid var(--orange);padding:9px 13px;background:#372b1c50;color:#ffdcaa;border-radius:3px}.progress{color:var(--teal)}.scroll{max-height:490px;overflow:auto}.hint strong{color:#bce5e0}.daystrip{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:6px;margin:13px 0}.dayunit{font-size:12px;text-align:center;background:#071923;border:1px solid var(--line);border-radius:9px;padding:10px 3px}.dayunit.complete{border-color:var(--teal);color:var(--teal)}.dayunit.today{outline:2px solid var(--orange)}.dayunit b{display:block;font-size:14px}.subgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}@media(max-width:850px){.subgrid{grid-template-columns:1fr}.daystrip{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -28,7 +28,8 @@
  <div class="panel"><h2>Recent occurrences</h2><div id="occur-list" class="scroll"><p class="hint">No records loaded.</p></div></div>
  <div class="panel"><h2>Persistent identity</h2><div class="small">SemiSoul ID</div><div class="answer" id="semisoul">—</div><p class="hint">An Ed25519 signing key anchors the audit history. Model swaps do not change this identity. Full rollback protection and production user authorization require additional infrastructure.</p><button id="verify" class="secondary">Verify audit ledger</button><div id="verification" class="message" aria-live="polite"></div></div>
 </div></section>
-<section class="panel" id="intention-lab" aria-labelledby="intention-title">
+<!-- Optional personal tool; shown only when AXIOM0_ENABLE_SYMBOLIC=1. Separate from municipal evidence. -->
+<section class="panel" id="intention-lab" aria-labelledby="intention-title" hidden>
  <div class="eyebrow">Optional reflection protocol / Separate from municipal evidence</div>
  <h2 id="intention-title">3 · 6 · 9 Intention Lab</h2>
  <p class="hint">Repeat an affirmation <strong>3 times</strong> per session, log up to <strong>6 sessions</strong> per day, for <strong>9 consecutive days</strong>. Set a measurable objective, take real actions, and record observed results. A completed practice is not evidence that numerical repetition caused an outcome.</p>
@@ -82,13 +83,14 @@ async function api(path,method='GET',payload){
 }
 function show(id,error){text($(id),error instanceof Error?error.message:error)}
 function showList(id,items,renderer){const root=$(id);root.replaceChildren();if(!items.length){child(root,'p','No records yet.','hint');return}items.forEach(item=>{const node=div('item');renderer(node,item);root.appendChild(node)})}
+let symbolicEnabled=false;
 async function refresh(){
  try{
   const [status,occ,hyp]=await Promise.all([api('/v1/status'),api('/v1/occurrences'),api('/v1/hypotheses')]);
   text($('connected'),'Local / Connected');$('connected').style.color='var(--teal)';
   text($('num-docs'),status.stats.documents);text($('num-occ'),status.stats.occurrences);text($('num-hyp'),status.stats.hypotheses);
   text($('semisoul'),status.identity.semisoul_id);
-  await refreshIntentions();
+  if(symbolicEnabled) await refreshIntentions();
   showList('occur-list',occ.slice(0,15),(root,e)=>{child(root,'strong',e.category+' · '+e.area);child(root,'div',e.summary);child(root,'div',e.event_at+' | '+e.source_label,'small')});
   showList('hypotheses',hyp.slice(0,25),(root,h)=>{child(root,'strong',h.claim);child(root,'span',h.status,'tag '+h.status);child(root,'div',h.evidence.length+' occurrence(s), '+h.source_label_count+' labeled source(s) · '+h.id,'small')});
   show('global-message','Connected to local AXIOM0.');
@@ -106,6 +108,7 @@ $('scan').onclick=async()=>{try{const entries=await api('/v1/signals','POST');sh
 $('ask').onclick=async()=>{text($('answer'),'Consulting local source index…');try{const a=await api('/v1/ask','POST',{question:$('question').value.trim()});text($('answer'),a.answer+'\n\nCited local source IDs: '+a.cited_source_ids.join(', ')+'\n\nUncertainties: '+a.uncertainties.join(' | ')+'\n\nStatus: '+a.classification)}catch(err){show('answer',err)}};
 $('verify').onclick=async()=>{try{const a=await api('/v1/verify');show('verification','Verified '+a.verified_events+' local events. Head '+a.head.slice(0,16)+'…')}catch(err){show('verification',err)}};
 let intentionsCache=[];
+fetch('/health').then(r=>r.json()).then(j=>{symbolicEnabled=!!(j.features&&j.features.symbolic_369);$('intention-lab').hidden=!symbolicEnabled}).catch(()=>{});
 async function refreshIntentions(preferredId){
  const records=await api('/v1/369/intentions');intentionsCache=records;
  const picker=$('intention-choice'), old=preferredId||picker.value;

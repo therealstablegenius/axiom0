@@ -4,6 +4,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import math
+from collections import Counter
 import re
 import uuid
 from pathlib import Path
@@ -36,6 +38,22 @@ def _row(row):
     return dict(row) if row is not None else None
 
 
+def _tokens(text: str) -> list[str]:
+    from .legacy_v02.retrieve import tokens
+    return tokens(text)
+
+
+def _excerpt(body: str, q_terms: list[str], before: int = 240, after: int = 1250) -> str:
+    """Window around the sentence sharing the most query terms (first sentence on ties)."""
+    best_pos, best_hits = 0, 0
+    q = set(q_terms)
+    for m in re.finditer(r'[^.;:\n]+[.;:\n]?', body):
+        hits = len(q & set(_tokens(m.group(0))))
+        if hits > best_hits:
+            best_pos, best_hits = m.start(), hits
+    return body[max(0, best_pos - before):best_pos + after]
+
+
 class LivingCity:
     def __init__(self, data_dir: str | Path):
         self.store = Store(data_dir)
@@ -55,8 +73,8 @@ class LivingCity:
         stamp = now()
         id_ = str(uuid.uuid4())
         with self.store.write() as conn:
-            conn.execute('INSERT INTO mind_history VALUES(?,?,?,?,?)',
-                         (id_,model,authorized_by,reason,stamp))
+            conn.execute('INSERT INTO mind_history(event_id,model,authorized_by,reason,changed_at) '
+                         'VALUES(?,?,?,?,?)', (id_,model,authorized_by,reason,stamp))
             self.store.append(conn,'mind_replaced',{'model':model,'authorized_by':authorized_by,
                                                     'reason':reason,'event_id':id_})
         return self.identity()
@@ -143,40 +161,54 @@ class LivingCity:
                 (min(max(limit,1),1000),)).fetchall()]
 
     def search_documents(self, query: str, limit: int = 6) -> list[dict]:
+        """Rank imported documents and current legal sections with BM25 (v0.7).
+
+        Same tokenizer and stop-words as the quote path's retriever, so short common
+        words do not count and long documents are length-normalised. Excerpts are
+        centred on the best-matching sentence. Deterministic: same library + question
+        -> same sources in the same order.
+        """
         query = _nonempty(query,'query',1000)
-        words = list(dict.fromkeys(re.findall(r'[\w\-]{3,}',query.casefold())))[:24]
-        if not words:
+        q_terms = list(dict.fromkeys(_tokens(query)))[:24]
+        if not q_terms:
             return []
         with self.store.connect() as conn:
             rows = conn.execute('SELECT * FROM documents ORDER BY acquired_at DESC LIMIT 2500').fetchall()
             legal_rows = conn.execute('''SELECT * FROM legal_sections WHERE superseded_at IS NULL
                 ORDER BY ingested_at DESC LIMIT 2500''').fetchall()
-        result = []
+        candidates = []
         for row in rows:
-            searchable = f"{row['title']} {row['citation']} {row['content']}".casefold()
-            score = sum(searchable.count(word) for word in words)
-            if score:
-                text = row['content']
-                first = min([text.casefold().find(word) for word in words if word in text.casefold()] or [0])
-                excerpt = text[max(0,first-240):first+1250]
-                result.append((score,{'id':row['id'],'title':row['title'],'citation':row['citation'],
-                    'authority':row['authority'],'version':row['version'],
-                    'source_url':row['source_url'],'source_reviewed':bool(row['source_reviewed']),
-                    'excerpt':excerpt}))
+            candidates.append((f"{row['title']} {row['citation']} {row['content']}", row['content'],
+                {'id':row['id'],'title':row['title'],'citation':row['citation'],
+                 'authority':row['authority'],'version':row['version'],
+                 'source_url':row['source_url'],'source_reviewed':bool(row['source_reviewed'])}))
         for law in legal_rows:
-            searchable=f"{law['source_id']} {law['section_id']} {law['title']} {law['body']}".casefold()
-            score=sum(searchable.count(word) for word in words)
-            if score:
-                body=law['body']
-                first=min([body.casefold().find(word) for word in words if word in body.casefold()] or [0])
-                excerpt=body[max(0,first-240):first+1250]
-                result.append((score,{'id':f"legal:{law['source_id']}:{law['section_id']}:v{law['version']}",
-                    'title':law['title'],'citation':f"{law['source_id']}:{law['section_id']}@v{law['version']}",
-                    'authority':law['authority'],'version':str(law['version']),
-                    'source_url':law['source_url'] or '', 'source_reviewed':False,
-                    'excerpt':excerpt}))
-        result.sort(key=lambda x:(-x[0],x[1]['citation']))
-        return [r for _,r in result[:min(max(limit,1),20)]]
+            candidates.append((f"{law['section_id']} {law['title']} {law['body']}", law['body'],
+                {'id':f"legal:{law['source_id']}:{law['section_id']}:v{law['version']}",
+                 'title':law['title'],'citation':f"{law['source_id']}:{law['section_id']}@v{law['version']}",
+                 'authority':law['authority'],'version':str(law['version']),
+                 'source_url':law['source_url'] or '', 'source_reviewed':False}))
+        if not candidates:
+            return []
+        docs = [_tokens(text) for text,_,_ in candidates]
+        n = len(docs); avgdl = (sum(len(d) for d in docs)/n) or 1.0
+        df = Counter()
+        for d in docs:
+            df.update(set(d))
+        k1, b = 1.5, 0.75
+        scored = []
+        for (searchable, body, meta), d in zip(candidates, docs):
+            tf = Counter(d); score = 0.0
+            for term in q_terms:
+                f = tf.get(term)
+                if f:
+                    idf = math.log(1 + (n - df[term] + 0.5)/(df[term] + 0.5))
+                    score += idf * f * (k1 + 1)/(f + k1*(1 - b + b*len(d)/avgdl))
+            if score > 0:
+                scored.append((score, {**meta, 'retrieval_score': round(score, 4),
+                                       'excerpt': _excerpt(body, q_terms)}))
+        scored.sort(key=lambda x:(-x[0],x[1]['citation']))
+        return [r for _,r in scored[:min(max(limit,1),20)]]
 
     def _evidence(self, conn, hypothesis_id):
         rows = conn.execute('''SELECT o.id,o.event_at,o.area,o.category,o.summary,o.source_label,o.source_url, e.stance, e.note
@@ -245,7 +277,8 @@ class LivingCity:
                                                  (min(max(limit,1),1000),)).fetchall()]
         return [self.get_hypothesis(id_) for id_ in ids]
 
-    def review_hypothesis(self, id_: str, *, status: str, reviewer: str, note: str, proof_reference: str | None = None) -> dict:
+    def review_hypothesis(self, id_: str, *, status: str, reviewer: str, note: str, proof_reference: str | None = None,
+                          reviewer_auth: str = 'local_label') -> dict:
         if status not in {'corroborated','verified','rejected','candidate'}:
             raise ValueError('Invalid review status')
         reviewer = _nonempty(reviewer,'reviewer',100)
@@ -264,7 +297,7 @@ class LivingCity:
             conn.execute('UPDATE hypotheses SET status=?,reviewer=?,review_note=?,proof_reference=?,updated_at=? WHERE id=?',
                          (status,reviewer,note,proof_reference,now(),id_))
             self.store.append(conn,'human_review_recorded',{'id':id_,'from':h['status'],'to':status,
-                            'reviewer':reviewer,'note':note,'proof_reference':proof_reference,
+                            'reviewer':reviewer,'reviewer_auth':reviewer_auth,'note':note,'proof_reference':proof_reference,
                             'evidence_ids':[e['id'] for e in evidence]})
         return self.get_hypothesis(id_)
 

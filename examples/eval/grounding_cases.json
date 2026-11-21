@@ -1,0 +1,30 @@
+{
+  "description": "Grounding evaluation cases over the SIMULATED evaluation code and SAMPLE charter (fictional texts). 'expected' lists source:section ids that contain the answer; 'must_mention' are facts a correct answer states; answerable=false means the sources do NOT contain the answer.",
+  "cases": [
+    {"id": "res-lead-time", "question": "How far in advance must a council chamber reservation request be submitted?",
+     "expected": ["eval-code:1-10"], "must_mention": ["ten business days"], "answerable": true},
+    {"id": "res-priority", "question": "What happens to a chamber reservation if the council needs the room for an official meeting?",
+     "expected": ["eval-code:1-10"], "must_mention": ["forty-eight hours"], "answerable": true},
+    {"id": "records-deadline", "question": "How quickly must the city respond to a public records request?",
+     "expected": ["eval-code:1-20"], "must_mention": ["third business day"], "answerable": true},
+    {"id": "records-open", "question": "Are city records open to public inspection under the charter?",
+     "expected": ["sample-charter:210"], "must_mention": ["state law"], "answerable": true},
+    {"id": "copy-fee", "question": "How much can the city charge for paper copies of records, and can the fee be waived?",
+     "expected": ["eval-code:1-30"], "must_mention": ["ten cents", "public interest"], "answerable": true},
+    {"id": "notice-hours", "question": "How much notice is required before a council committee meeting?",
+     "expected": ["eval-code:1-40"], "must_mention": ["twenty-four hours"], "answerable": true},
+    {"id": "quorum", "question": "How many council members make a quorum?",
+     "expected": ["eval-code:1-50"], "must_mention": ["seven"], "answerable": true},
+    {"id": "ethics-confidential", "question": "Is the identity of someone who files an ethics complaint kept confidential?",
+     "expected": ["eval-code:1-60"], "must_mention": ["probable cause"], "answerable": true},
+    {"id": "banner-days", "question": "For how many days is a street banner permit valid?",
+     "expected": ["eval-code:1-70"], "must_mention": ["fourteen"], "answerable": true},
+    {"id": "unans-parking", "question": "What is the fine for parking in a council reserved space?",
+     "expected": [], "must_mention": [], "answerable": false},
+    {"id": "unans-salary", "question": "What is the annual salary of a council member?",
+     "expected": [], "must_mention": [], "answerable": false},
+    {"id": "unans-trap", "question": "How many days does the city clerk have to approve a chamber reservation request?",
+     "expected": [], "must_mention": [], "answerable": false,
+     "note": "Keyword trap: section 1-10 matches strongly but sets no approval deadline. A grounded model says so; an ungrounded one invents a number."}
+  ]
+}

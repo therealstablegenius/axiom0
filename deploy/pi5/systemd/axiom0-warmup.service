@@ -1,0 +1,20 @@
+[Unit]
+Description=Preload the AXIOM0 model into Ollama so the first question is fast
+After=ollama.service
+Requires=ollama.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/axiom0/axiom0.env
+ExecStart=/opt/axiom0/deploy/pi5/axiom0-pi5-warmup.sh
+TimeoutStartSec=300
+# A failed warmup only means the first question loads the model itself.
+SuccessExitStatus=0 1
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
