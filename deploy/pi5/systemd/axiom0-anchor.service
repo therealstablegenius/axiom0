@@ -1,0 +1,17 @@
+[Unit]
+Description=Publish a signed AXIOM0 ledger anchor (rollback / rewrite detection)
+After=axiom0.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=axiom0
+Group=axiom0
+EnvironmentFile=/etc/axiom0/axiom0.env
+Environment=HOME=/var/lib/axiom0
+ExecStart=/opt/axiom0/deploy/anchor/axiom0-anchor-publish.sh
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/axiom0 /var/lib/axiom0-anchors
+ProtectHome=yes
+PrivateTmp=yes

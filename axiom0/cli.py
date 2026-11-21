@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 from .core import Axiom0
+from .store import IntegrityError
 from .engine import LivingCity
 from .semisoul import SemiSoul
 from .intention369 import IntentionLab
@@ -33,6 +34,19 @@ def execute(argv: list[str] | None = None) -> None:
     batch=sub.add_parser('ingest-jsonl');batch.add_argument('file',type=Path)
     q=sub.add_parser('ask');q.add_argument('question');q.add_argument('--llm',action='store_true')
     w=sub.add_parser('warn');w.add_argument('csv_file',type=Path)
+    w.add_argument('--method',choices=('v2','v1'),default='v2',help='v2 (default): count model, seasonality, FDR control')
+    an=sub.add_parser('anchor',help='Sign the ledger head into a receipt to publish outside this computer')
+    an.add_argument('--out',type=Path,default=None,help='Folder for the receipt (default: DATA_DIR/anchors)')
+    av=sub.add_parser('anchor-verify',help='Check published receipts against this ledger (detects rewrites/rollback)')
+    av.add_argument('paths',nargs='+',type=Path)
+    ra=sub.add_parser('reviewer-add',help='Enroll a reviewer and print their personal key once');ra.add_argument('name')
+    rr=sub.add_parser('reviewer-revoke');rr.add_argument('name')
+    sub.add_parser('reviewer-list')
+    bk=sub.add_parser('backup',help='Consistent backup (database + identity key + manifest)')
+    bk.add_argument('dest',type=Path,nargs='?',default=Path('axiom0_backups'))
+    rs=sub.add_parser('restore',help='Restore a backup into an EMPTY --data-dir');rs.add_argument('archive',type=Path)
+    ex=sub.add_parser('export-audit',help='Export the signed ledger for independent verification')
+    ex.add_argument('out',type=Path)
     pr=sub.add_parser('propose');pr.add_argument('text');pr.add_argument('--evidence',action='append',required=True)
     qr=sub.add_parser('queue-review');qr.add_argument('id')
     qr.add_argument('decision',choices=('approved_for_human_followup','rejected'))
@@ -73,6 +87,12 @@ def execute(argv: list[str] | None = None) -> None:
             Axiom0(os.environ['AXIOM0_DATA_DIR']).verify()  # fail closed on supported integrity checks
             uvicorn.run('axiom0.api:app',host='127.0.0.1',port=8765,log_level='info')
             return
+        if args.command=='restore':
+            # Must run before Axiom0() is constructed: that would create a fresh identity.
+            from .backup import restore_backup
+            emit(restore_backup(args.archive,args.data_dir));return
+        if args.command.startswith('369-') and os.environ.get('AXIOM0_ENABLE_SYMBOLIC','').strip()!='1':
+            raise ValueError('The optional 3-6-9 Intention Lab is disabled; set AXIOM0_ENABLE_SYMBOLIC=1 to use it')
         ax=Axiom0(args.data_dir)
         actor=args.actor
         if not actor:
@@ -95,7 +115,18 @@ def execute(argv: list[str] | None = None) -> None:
         elif cmd=='documents': value=city.documents()
         elif cmd=='ingest': value=ax.ingest(actor,args.path)
         elif cmd=='ask': value=ax.ask(actor,args.question,use_llm=args.llm)
-        elif cmd=='warn': value=ax.warn(actor,args.csv_file)
+        elif cmd=='warn':
+            ax._local_authorize(actor);value=ax.municipal.service_spikes(args.csv_file,actor=actor,method=args.method)
+        elif cmd=='anchor': value=ax.anchor(actor,args.out)
+        elif cmd=='anchor-verify':
+            value=ax.verify_anchors(args.paths)
+            if not value['ok']:
+                emit(value);raise SystemExit(1)
+        elif cmd=='reviewer-add': value=ax.reviewer_add(actor,args.name)
+        elif cmd=='reviewer-revoke': value=ax.reviewer_revoke(actor,args.name)
+        elif cmd=='reviewer-list': value=ax.reviewer_list()
+        elif cmd=='backup': value=ax.backup(actor,args.dest)
+        elif cmd=='export-audit': value=ax.export_audit(actor,args.out)
         elif cmd=='queue': value=ax.queue()
         elif cmd=='propose': value=ax.recommend(actor,args.text,args.evidence)
         elif cmd=='queue-review': value=ax.municipal.review(args.id,reviewer=args.reviewer,decision=args.decision,rationale=args.note)
@@ -131,7 +162,7 @@ def execute(argv: list[str] | None = None) -> None:
         elif cmd=='fetch-loop': asyncio.run(ResilientFetcher(args.data_dir).continuous(hours=args.hours));return
         else: raise ValueError('Unrecognized subcommand')
         emit(value)
-    except (ValueError,PermissionError,RuntimeError,OSError,KeyError) as e:
+    except (ValueError,PermissionError,RuntimeError,OSError,KeyError,IntegrityError) as e:
         if args.json: emit({'error':type(e).__name__,'detail':str(e)})
         else: print(f'{type(e).__name__}: {e}',file=sys.stderr)
         raise SystemExit(1)

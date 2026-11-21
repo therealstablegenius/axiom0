@@ -17,6 +17,8 @@
 #   --performance-governor                keep CPU at full clock (needs active cooling)
 #   --skip-ollama                         do not install/configure Ollama
 #   --skip-model                          do not download the model now
+#   --enable-anchors                      daily signed ledger anchor, published from /var/lib/axiom0-anchors
+#                                         (make that folder a git clone of a public repo; see docs/ANCHORING.md)
 #   --force                               continue on a board that is not a Pi 5
 #   --dry-run                             print every action, change nothing
 #   -h | --help
@@ -33,7 +35,8 @@ INBOX=/srv/axiom0-inbox
 SVC_USER=axiom0
 
 PROFILE="" MODEL_OVERRIDE="" ADMIN="${SUDO_USER:-}" MODELS_DIR="" OLLAMA_VERSION_PIN=""
-GOVERNOR=no SKIP_OLLAMA=no SKIP_MODEL=no FORCE=no DRY_RUN=no
+GOVERNOR=no SKIP_OLLAMA=no SKIP_MODEL=no FORCE=no DRY_RUN=no ANCHORS=no
+ANCHOR_DIR=/var/lib/axiom0-anchors
 
 # ---------------------------------------------------------------- helpers
 c_ok=$'\e[32m' c_warn=$'\e[33m' c_err=$'\e[31m' c_dim=$'\e[2m' c_off=$'\e[0m'
@@ -79,9 +82,10 @@ while [[ $# -gt 0 ]]; do
     --performance-governor) GOVERNOR=yes; shift ;;
     --skip-ollama) SKIP_OLLAMA=yes; shift ;;
     --skip-model) SKIP_MODEL=yes; shift ;;
+    --enable-anchors) ANCHORS=yes; shift ;;
     --force) FORCE=yes; shift ;;
     --dry-run) DRY_RUN=yes; shift ;;
-    -h|--help) sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "Unknown option: $1 (see --help)" ;;
   esac
 done
@@ -159,6 +163,7 @@ run install -d -m 0700 -o "$SVC_USER" -g "$SVC_USER" "$DATA"
 run install -d -m 0750 -o root -g "$SVC_USER" "$ETC"
 # Drop files here so the service account can read them (your home folder is private).
 run install -d -m 2770 -o "$SVC_USER" -g "$SVC_USER" "$INBOX"
+run install -d -m 0755 -o "$SVC_USER" -g "$SVC_USER" "$ANCHOR_DIR"   # receipts are public by design
 if [[ -n ${SUDO_USER:-} && $SUDO_USER != root ]]; then
   run usermod -aG "$SVC_USER" "$SUDO_USER"
   info "$SUDO_USER added to the $SVC_USER group (log out and back in for it to apply)."
@@ -191,6 +196,9 @@ ENV_FILE="$ETC/axiom0.env"
   echo "AXIOM0_MODEL=$MODEL"
   echo "AXIOM0_DATA_DIR=$DATA"
   echo "AXIOM0_LOCAL_ACTOR=$ADMIN"
+  echo "AXIOM0_ANCHOR_DIR=$ANCHOR_DIR"
+  echo "# Optional personal 3-6-9 Intention Lab / symbolic scoring (off for municipal use):"
+  echo "AXIOM0_ENABLE_SYMBOLIC=0"
 } >"/tmp/axiom0-env.$$"
 if [[ -f $ENV_FILE && $DRY_RUN != yes ]]; then
   cp -a "$ENV_FILE" "$ENV_FILE.bak.$(date +%Y%m%d%H%M%S)"
@@ -344,12 +352,21 @@ fi
 step "Installing and starting services"
 run install -m 0644 "$PI5_DIR/systemd/axiom0.service" /etc/systemd/system/axiom0.service
 run install -m 0644 "$PI5_DIR/systemd/axiom0-warmup.service" /etc/systemd/system/axiom0-warmup.service
+run install -m 0644 "$PI5_DIR/systemd/axiom0-anchor.service" /etc/systemd/system/axiom0-anchor.service
+run install -m 0644 "$PI5_DIR/systemd/axiom0-anchor.timer" /etc/systemd/system/axiom0-anchor.timer
 run systemctl daemon-reload
 run systemctl enable axiom0.service
 run systemctl restart axiom0.service
 if [[ $SKIP_OLLAMA == no && $SKIP_MODEL == no ]]; then
   run systemctl enable axiom0-warmup.service
   run systemctl start axiom0-warmup.service || warn "Model warmup failed; the first question will load it instead."
+fi
+
+if [[ $ANCHORS == yes ]]; then
+  run systemctl enable --now axiom0-anchor.timer
+  info "Daily ledger anchors: on (receipts in $ANCHOR_DIR). Make it a git clone with a remote to publish them."
+else
+  info "Daily ledger anchors: off (re-run with --enable-anchors; see docs/ANCHORING.md)"
 fi
 
 if [[ $DRY_RUN != yes ]]; then

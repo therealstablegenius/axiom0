@@ -11,8 +11,10 @@ from .engine import LivingCity
 from .llm import OllamaMind, LocalMindError
 from .store import IntegrityError
 from .intention369 import IntentionLab
+from .reviewers import Reviewers, KEY_PREFIX
 
-app = FastAPI(title='AXIOM0 Living City',version='0.6.1',docs_url=None,redoc_url=None)
+from . import __version__
+app = FastAPI(title='AXIOM0 Living City',version=__version__,docs_url=None,redoc_url=None)
 
 
 @lru_cache(maxsize=1)
@@ -34,8 +36,22 @@ def service_key(x_axiom0_key: str | None = Header(None)):
     _secret('AXIOM0_API_KEY',x_axiom0_key)
 
 
-def reviewer_key(x_axiom0_reviewer_key: str | None = Header(None)):
+def reviewer_key(x_axiom0_reviewer_key: str | None = Header(None)) -> dict:
+    """Authenticate a reviewer and return WHO they are.
+
+    Personal keys (v0.7, `axiom0 reviewer-add NAME`) identify the reviewer by name.
+    The v0.6 shared reviewer key still works unless AXIOM0_REQUIRE_PERSONAL_REVIEWERS=1,
+    and is recorded as reviewer_auth='shared_key' so the ledger shows the weaker basis.
+    """
+    if x_axiom0_reviewer_key and x_axiom0_reviewer_key.startswith(KEY_PREFIX):
+        name = Reviewers(core().store).authenticate(x_axiom0_reviewer_key)
+        if not name:
+            raise HTTPException(status_code=401,detail='Invalid or revoked reviewer key')
+        return {'name':name,'auth':'personal_key'}
+    if os.environ.get('AXIOM0_REQUIRE_PERSONAL_REVIEWERS','').strip()=='1':
+        raise HTTPException(status_code=401,detail='Personal reviewer key required (shared reviewer key disabled)')
     _secret('AXIOM0_REVIEWER_KEY',x_axiom0_reviewer_key)
+    return {'name':os.environ.get('AXIOM0_REVIEWER_ID','api_reviewer'),'auth':'shared_key'}
 
 
 class DocumentIn(BaseModel):
@@ -126,31 +142,43 @@ class Outcome369In(BaseModel):
     note: str = ''
 
 
+def symbolic_enabled() -> bool:
+    return os.environ.get('AXIOM0_ENABLE_SYMBOLIC','').strip()=='1'
+
+
+def require_symbolic():
+    """The 3-6-9 Intention Lab and symbolic-state scoring are an optional personal module,
+    off by default so municipal deployments expose only evidence and review features."""
+    if not symbolic_enabled():
+        raise HTTPException(status_code=404,detail='Optional 3-6-9 symbolic features are disabled '
+                            '(set AXIOM0_ENABLE_SYMBOLIC=1 to enable them on this install)')
+
+
 def lab() -> IntentionLab:
     return IntentionLab(core().store)
 
 
-@app.get('/v1/369/intentions',dependencies=[Depends(service_key)])
+@app.get('/v1/369/intentions',dependencies=[Depends(service_key),Depends(require_symbolic)])
 def intentions():
     return lab().list()
 
 
-@app.post('/v1/369/intentions',dependencies=[Depends(service_key)])
+@app.post('/v1/369/intentions',dependencies=[Depends(service_key),Depends(require_symbolic)])
 def start_intention(entry:IntentionIn):
     return lab().start(**entry.model_dump())
 
 
-@app.get('/v1/369/intentions/{id_}',dependencies=[Depends(service_key)])
+@app.get('/v1/369/intentions/{id_}',dependencies=[Depends(service_key),Depends(require_symbolic)])
 def get_intention(id_:str):
     return lab().get(id_)
 
 
-@app.post('/v1/369/intentions/{id_}/sessions',dependencies=[Depends(service_key)])
+@app.post('/v1/369/intentions/{id_}/sessions',dependencies=[Depends(service_key),Depends(require_symbolic)])
 def add_intention_session(id_:str,entry:Session369In):
     return lab().session(id_,**entry.model_dump())
 
 
-@app.post('/v1/369/intentions/{id_}/outcomes',dependencies=[Depends(service_key)])
+@app.post('/v1/369/intentions/{id_}/outcomes',dependencies=[Depends(service_key),Depends(require_symbolic)])
 def add_intention_outcome(id_:str,entry:Outcome369In):
     return lab().outcome(id_,**entry.model_dump())
 
@@ -168,7 +196,8 @@ def home():
 
 @app.get('/health')
 def health():
-    return {'status':'ok','version':'0.6.1','authenticated_status_requires_key':True}
+    return {'status':'ok','version':__version__,'authenticated_status_requires_key':True,
+            'features':{'symbolic_369':symbolic_enabled()}}
 
 
 @app.get('/v1/status',dependencies=[Depends(service_key)])
@@ -217,11 +246,11 @@ def annotate_evidence(id_:str,entry:EvidenceIn):
     return core().attach_evidence(id_,**entry.model_dump())
 
 
-@app.post('/v1/hypotheses/{id_}/review',dependencies=[Depends(service_key),Depends(reviewer_key)])
-def review(id_:str,entry:ReviewIn):
+@app.post('/v1/hypotheses/{id_}/review',dependencies=[Depends(service_key)])
+def review(id_:str,entry:ReviewIn,principal:dict=Depends(reviewer_key)):
     data=entry.model_dump()
-    data['reviewer']=os.environ.get('AXIOM0_REVIEWER_ID','api_reviewer')
-    return core().review_hypothesis(id_,**data)
+    data['reviewer']=principal['name']   # never taken from the request body
+    return core().review_hypothesis(id_,**data,reviewer_auth=principal['auth'])
 
 
 @app.post('/v1/ask',dependencies=[Depends(service_key)])
@@ -232,9 +261,9 @@ def ask(q:QuestionIn):
         raise HTTPException(status_code=503,detail=str(e)) from e
 
 
-@app.post('/v1/mind',dependencies=[Depends(service_key),Depends(reviewer_key)])
-def replace_mind(m:MindIn):
-    return core().swap_mind(m.model,os.environ.get('AXIOM0_REVIEWER_ID','api_reviewer'),m.reason)
+@app.post('/v1/mind',dependencies=[Depends(service_key)])
+def replace_mind(m:MindIn,principal:dict=Depends(reviewer_key)):
+    return core().swap_mind(m.model,principal['name'],m.reason)
 
 
 @app.post('/v1/mca',dependencies=[Depends(service_key)])
@@ -242,7 +271,7 @@ def mca(atom:MCAIn):
     return core().mca_record(**atom.model_dump())
 
 
-@app.post('/v1/symbolic-state',dependencies=[Depends(service_key)])
+@app.post('/v1/symbolic-state',dependencies=[Depends(service_key),Depends(require_symbolic)])
 def state(v:VectorIn):
     return core().symbolic_state(v.vector)
 
@@ -354,13 +383,13 @@ def compat_propose(payload: ProposeCompatIn):
                             recommendation=payload.recommendation,evidence_refs=payload.evidence_refs)
 
 
-@app.post('/queue/review',dependencies=[Depends(service_key),Depends(reviewer_key)])
-def compat_queue_review(payload: QueueReviewCompatIn):
-    reviewer=os.environ.get('AXIOM0_REVIEWER_ID','api_reviewer')
+@app.post('/queue/review',dependencies=[Depends(service_key)])
+def compat_queue_review(payload: QueueReviewCompatIn,principal:dict=Depends(reviewer_key)):
+    reviewer=principal['name']
     if reviewer.casefold()=='api_service':
         raise HTTPException(status_code=503,detail='Reviewer principal must be separate from service principal')
-    return compat().municipal.review(payload.id,reviewer=reviewer,
-                                   decision=payload.decision,rationale=payload.note)
+    return compat().municipal.review(payload.id,reviewer=reviewer,decision=payload.decision,
+                                   rationale=payload.note,reviewer_auth=principal['auth'])
 
 
 @app.get('/v1/legal/sections',dependencies=[Depends(service_key)])
@@ -388,9 +417,9 @@ def semisoul_memories():
     return SemiSoul(core().store).memories()
 
 
-@app.post('/v1/semisoul/memories',dependencies=[Depends(service_key),Depends(reviewer_key)])
-def semisoul_record_memory(payload: MemoryCompatIn):
-    return SemiSoul(core().store).remember(**payload.model_dump(),actor='api_reviewer')
+@app.post('/v1/semisoul/memories',dependencies=[Depends(service_key)])
+def semisoul_record_memory(payload: MemoryCompatIn,principal:dict=Depends(reviewer_key)):
+    return SemiSoul(core().store).remember(**payload.model_dump(),actor=principal['name'])
 
 
 @app.get('/v1/semisoul/attestation',dependencies=[Depends(service_key)])

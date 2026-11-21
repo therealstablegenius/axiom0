@@ -1,4 +1,6 @@
-# AXIOM0 · 3-6-9 Intention Lab (v0.4)
+# AXIOM0 · 3-6-9 Intention Lab (added v0.4; opt-in since v0.7)
+
+**Off by default.** Enable it on a personal install with `AXIOM0_ENABLE_SYMBOLIC=1` (environment or `/etc/axiom0/axiom0.env`). When disabled, its API routes and `symbolic-state` return 404, the dashboard hides the Lab, and `369-*` CLI commands refuse. Municipal deployments should leave it off.
 
 **Status:** Optional self-report goal-setting feature. Not municipal evidence, not statistical forecasting, and not proof that numbers or affirmations manifest events.
 

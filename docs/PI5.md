@@ -47,6 +47,7 @@ Useful options:
 | `--ollama-version 0.x.y` | Pin the Ollama version |
 | `--performance-governor` | Hold the CPU at full clock (only with active cooling) |
 | `--skip-model` | Install everything now, download the model later |
+| `--enable-anchors` | Daily signed ledger anchor, published from `/var/lib/axiom0-anchors` (see `ANCHORING.md`) |
 
 The installer is safe to re-run. It keeps your keys and ledger, backs up the previous
 config, and regenerates the tuning to match the profile you choose.
@@ -135,6 +136,28 @@ optional, and leaving one unset keeps the desktop v0.6 behaviour.
 Ollama's own tuning lives in `/etc/systemd/system/ollama.service.d/10-axiom0-pi5.conf`.
 Invalid values are rejected with a clear error rather than silently ignored.
 
+### Accountability features (v0.7)
+
+```bash
+axiom0 reviewer-add "Daliah West"     # personal reviewer key, shown once
+axiom0 backup /media/usb/axiom0       # then store the archive encrypted and offline
+sudo systemctl start axiom0-anchor    # one anchor now (needs --enable-anchors + ANCHORING.md setup)
+```
+
+The optional 3·6·9 Intention Lab is off by default. To turn it on for a personal install,
+set `AXIOM0_ENABLE_SYMBOLIC=1` in `/etc/axiom0/axiom0.env` and restart.
+
+### Measure grounding on this Pi
+
+```bash
+sudo -u axiom0 env $(grep -v '^#' /etc/axiom0/axiom0.env | xargs) \
+  /opt/axiom0/.venv/bin/python /opt/axiom0/tools/eval_grounding.py --out /tmp/axiom0-eval
+```
+
+This runs 12 fixed questions (including three that the sources cannot answer) against the
+installed model with the Pi's tuning, and writes a report showing citation accuracy,
+refusals and timing.
+
 ## 7. Where things live
 
 | Path | Contents |
@@ -144,6 +167,7 @@ Invalid values are rejected with a clear error rather than silently ignored.
 | `/etc/axiom0/axiom0.env` | Settings (profile + overrides) |
 | `/etc/axiom0/secrets.env` | Service and reviewer keys |
 | `/srv/axiom0-inbox` | Drop files here to ingest them |
+| `/var/lib/axiom0-anchors` | Signed anchor receipts (public by design) |
 | `/usr/local/bin/axiom0` | Command-line wrapper |
 
 ## 8. Uninstall

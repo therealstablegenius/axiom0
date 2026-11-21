@@ -81,8 +81,10 @@ class Axiom0:
             for sentence in best_sentences(question,sec.text,n=2):
                 checked=self.municipal.check_quote(cite=sec.cite,quote=sentence,version=sec.version)
                 if checked['status']=='quote_matched':
-                    findings.append({'text':sentence,'cite':checked['cite'],'source_url':sec.source_url,
-                                     'authority':sec.authority,'effective':sec.effective,
+                    findings.append({'kind':'source_excerpt','text':sentence,'cite':checked['cite'],
+                                     'source_url':sec.source_url,'authority':sec.authority,'effective':sec.effective,
+                                     'relevance':'keyword_ranked (BM25), not judged to answer the question',
+                                     'retrieval_score':round(score,4),
                                      'proof_gate':'matching_source_quote_not_legal_conclusion'})
         draft=None
         if use_llm is True:
@@ -92,7 +94,10 @@ class Axiom0:
                 'status':'source_excerpt_only' if findings else 'insufficient_evidence',
                 'findings':findings,'rejected':[],
                 'confidence':'not_calibrated','draft':draft,
-                'disclaimer':'Quoted source material only; no independent authenticity or legal applicability determination'}
+                'disclaimer':'Quoted source material only; no independent authenticity or legal applicability determination',
+                'how_to_read':('Findings are verbatim excerpts chosen because they share words with the question. '
+                               'The quote check proves each excerpt really appears in the cited version; it does NOT '
+                               'show that the excerpt answers the question. A person must read them in context.')}
         with self.store.write() as db:
             ledger_head=self.store.append(db,'research_queried',{'actor':user,'question':question,
                 'status':result['status'],'citations':[f['cite'] for f in findings],
@@ -120,6 +125,49 @@ class Axiom0:
     def review(self, user: str, recommendation_id: str, decision: str, note: str) -> dict:
         self._local_authorize(user)
         return self.municipal.review(recommendation_id,reviewer=user,decision=decision,rationale=note)
+
+    # ---- v0.7: anchoring, reviewer enrollment, backup and audit export -------------
+    def _admin_only(self, user: str) -> None:
+        with self.store.connect() as db:
+            row=db.execute('SELECT value FROM metadata WHERE key=?',('local_admin',)).fetchone()
+        if not row or user!=row['value']:
+            raise PermissionError('Only the enrolled local administrator may do this')
+
+    def anchor(self, user: str, out_dir: str | Path | None = None) -> dict:
+        from . import anchor
+        self._local_authorize(user)
+        receipt=anchor.create_receipt(self.store,actor=user)
+        path=anchor.write_receipt(receipt,out_dir or self.data_dir/'anchors')
+        return {'receipt':receipt,'file':str(path),
+                'next_step':'Publish this file somewhere this computer cannot rewrite (public repo, email, print).'}
+
+    def verify_anchors(self, paths: list[str | Path]) -> dict:
+        from . import anchor
+        return anchor.verify_many(self.store,paths)
+
+    def reviewer_add(self, user: str, name: str) -> dict:
+        from .reviewers import Reviewers
+        self._admin_only(user)
+        return Reviewers(self.store).enroll(name,enrolled_by=user)
+
+    def reviewer_revoke(self, user: str, name: str) -> dict:
+        from .reviewers import Reviewers
+        self._admin_only(user)
+        return Reviewers(self.store).revoke(name,revoked_by=user)
+
+    def reviewer_list(self) -> list[dict]:
+        from .reviewers import Reviewers
+        return Reviewers(self.store).list()
+
+    def backup(self, user: str, dest_dir: str | Path) -> dict:
+        from .backup import create_backup
+        self._admin_only(user)
+        return create_backup(self.store,dest_dir,actor=user)
+
+    def export_audit(self, user: str, out_path: str | Path) -> dict:
+        from .backup import export_audit
+        self._admin_only(user)
+        return export_audit(self.store,out_path)
 
     def verify(self) -> dict:
         out=self.semisoul.verify()

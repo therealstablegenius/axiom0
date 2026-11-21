@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  python: '3.11' }
+          - { os: ubuntu-latest,  python: '3.13' }
+          - { os: windows-latest, python: '3.12' }
+          - { os: macos-latest,   python: '3.12' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '${{ matrix.python }}' }
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q tests
+      - name: docs/VERIFICATION.md matches the test suite
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13'
+        run: python tools/update_verification.py --check
+
+  windows-installer:
+    # The review's top deployment gap: the Windows path had never run on Windows.
+    name: Windows installer end-to-end
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install (fresh)
+        shell: powershell
+        run: .\deploy\windows\Install-AXIOM0.ps1 -Admin ci_admin
+      - name: Secrets file is data, owner-only
+        shell: powershell
+        run: |
+          $s = 'axiom0_data\axiom0-secrets.env'
+          if (-not (Test-Path $s)) { throw 'secrets file missing' }
+          if (Test-Path 'axiom0_data\axiom0-secrets.ps1') { throw 'legacy executable secrets file still present' }
+          $acl = Get-Acl $s
+          if (-not $acl.AreAccessRulesProtected) { throw 'secrets file still inherits permissions' }
+          $who = @($acl.Access | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
+          if ($who.Count -ne 1) { throw "secrets readable by more than one account: $($who -join ', ')" }
+          Write-Host "Secrets restricted to: $who"
+      - name: Start server, check health and authentication
+        shell: powershell
+        run: |
+          $job = Start-Job -ScriptBlock { param($r) Set-Location $r; & .\deploy\windows\Start-AXIOM0.ps1 } -ArgumentList (Get-Location).Path
+          $ok = $false
+          foreach ($i in 1..60) {
+            try { $h = Invoke-RestMethod http://127.0.0.1:8765/health; $ok = $true; break } catch { Start-Sleep 1 }
+          }
+          if (-not $ok) { Receive-Job $job; throw 'server did not start' }
+          Write-Host ("health: " + ($h | ConvertTo-Json -Compress))
+          $key = ((Get-Content axiom0_data\axiom0-secrets.env | Where-Object { $_ -like 'AXIOM0_API_KEY=*' }) -split '=',2)[1]
+          $status = Invoke-RestMethod http://127.0.0.1:8765/v1/status -Headers @{ 'X-AXIOM0-Key' = $key }
+          if (-not $status.identity.semisoul_id) { throw 'authenticated status failed' }
+          try { Invoke-RestMethod http://127.0.0.1:8765/v1/status -Headers @{ 'X-AXIOM0-Key' = 'wrong' }; throw 'wrong key accepted' }
+          catch { if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw $_ } }
+          Stop-Job $job; Remove-Job $job -Force
+      - name: CLI cycle (ingest, ask, warn, anchor, backup, export + independent verify)
+        shell: powershell
+        run: |
+          $py = '.venv\Scripts\python.exe'
+          & $py -m axiom0 --data-dir axiom0_data --actor ci_admin --json ingest examples\SIMULATED_charter.md; if ($LASTEXITCODE) { throw 'ingest' }
+          & $py -m axiom0 --data-dir axiom0_data --actor ci_admin --json ask "What does the charter say about public records?"; if ($LASTEXITCODE) { throw 'ask' }
+          & $py -m axiom0 --data-dir axiom0_data --actor ci_admin --json warn examples\SIMULATED_service_requests.csv; if ($LASTEXITCODE) { throw 'warn' }
+          & $py -m axiom0 --data-dir axiom0_data --actor ci_admin --json anchor --out anchors; if ($LASTEXITCODE) { throw 'anchor' }
+          & $py -m axiom0 --data-dir axiom0_data --actor ci_admin --json backup backups; if ($LASTEXITCODE) { throw 'backup' }
+          & $py -m axiom0 --data-dir axiom0_data --actor ci_admin --json export-audit audit.jsonl; if ($LASTEXITCODE) { throw 'export' }
+          $receipt = (Get-ChildItem anchors\*.json | Select-Object -First 1).FullName
+          & $py -I tools\axiom0_audit_verify.py audit.jsonl $receipt; if ($LASTEXITCODE) { throw 'independent verify' }
+          $archive = (Get-ChildItem backups\*.tar.gz | Select-Object -First 1).FullName
+          & $py -m axiom0 --data-dir restored --json restore $archive; if ($LASTEXITCODE) { throw 'restore' }
+          & $py -m axiom0 --data-dir restored --json anchor-verify $receipt; if ($LASTEXITCODE) { throw 'anchor-verify after restore' }
+      - name: Re-install converts a v0.6 secrets script without running it
+        shell: powershell
+        run: |
+          Remove-Item axiom0_data\axiom0-secrets.env
+          @(
+            '$env:AXIOM0_API_KEY = "legacyApiKey_0123456789abcdefghijklmnopqrstuv"'
+            '$env:AXIOM0_REVIEWER_KEY = "legacyReviewerKey_0123456789abcdefghijklmnop"'
+            '$env:AXIOM0_REVIEWER_ID = "local_reviewer"'
+            'New-Item -Path SHOULD_NOT_EXIST.txt -ItemType File'
+          ) | Set-Content axiom0_data\axiom0-secrets.ps1
+          .\deploy\windows\Install-AXIOM0.ps1 -Admin ci_admin
+          if (Test-Path SHOULD_NOT_EXIST.txt) { throw 'legacy secrets file was executed' }
+          if (Test-Path axiom0_data\axiom0-secrets.ps1) { throw 'legacy file not removed' }
+          if (-not (Select-String -Path axiom0_data\axiom0-secrets.env -Pattern 'legacyApiKey_0123456789')) { throw 'keys not carried over' }
+
+  pi5-scripts:
+    name: Raspberry Pi 5 scripts (lint + dry run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y shellcheck
+      - run: shellcheck -S warning deploy/pi5/*.sh deploy/linux/*.sh deploy/anchor/*.sh
+      - run: bash deploy/pi5/install.sh --dry-run --profile pi5-8gb --admin ci

@@ -10,9 +10,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 import json
+import re
 import uuid
 from .legacy_v02.truth import parse_source, section_hash, normalize
 from .legacy_v02.warning import load_requests, spikes, SpikeRule
+from .spikes_v2 import spikes_v2, SpikeRuleV2
 from .store import Store, now, canonical, digest
 from .semisoul import checked
 
@@ -20,6 +22,32 @@ FORBIDDEN_ACTIONS={
     'issue_citation','enforcement_decision','authorize_spending',
     'modify_official_record','person_level_risk_score',
 }
+
+# v0.7 guardrail: pattern families over normalised text (case, punctuation and spacing
+# removed), covering common phrasings and word forms rather than one exact phrase.
+# This is a GUARDRAIL that catches ordinary wording, NOT a security control: a
+# determined user can still rephrase. The real controls are that AXIOM0 has no
+# capability to perform these actions, and that every recommendation needs a
+# separate human reviewer.
+_FORBIDDEN_PATTERNS={
+    'issue_citation':[r'\b(issue|write|serve|send|give|hand)\w*\s+(an?\s+|the\s+)?(citation|ticket|fine|summons|violation notice)s?\b',
+                      r'\bcite\s+(the\s+)?(resident|owner|tenant|landlord|property|business|driver)s?\b',
+                      r'\bissue citation\b'],
+    'enforcement_decision':[r'\b(enforce|enforcement|penali[sz]e|penalty|penalties|evict\w*|condemn\w*|arrest\w*|tow(ed|ing)?\b|shut\s*off|red\s*tag\w*|padlock\w*)'],
+    'authorize_spending':[r'\b(authori[sz]\w*|approv\w*|allocat\w*|spend\w*|disburs\w*|pay\w*|transfer\w*|award\w*|release\w*)\b.{0,60}\b(fund\w*|money|payment\w*|budget\w*|dollars?|grant\w*|contract\w*|expenditure\w*|\d[\d,]*\s*(usd|dollars))\b',
+                          r'\bauthori[sz]e spending\b'],
+    'modify_official_record':[r'\b(modif\w*|chang\w*|edit\w*|alter\w*|delet\w*|amend\w*|rewrit\w*|backdat\w*|expung\w*|remov\w*)\b.{0,60}\b(official record\w*|minutes|ordinance\w*|resolution\w*|council record\w*|journal|legislative record\w*|public record\w*)\b'],
+    'person_level_risk_score':[r'\b(risk\s*scor\w*|scor\w*|rank\w*|profil\w*|predict\w*|blacklist\w*|watch\s*list\w*)\b.{0,60}\b(person|people|resident\w*|individual\w*|tenant\w*|owner\w*|household\w*|famil\w*|citizen\w*)\b'],
+}
+
+
+def forbidden_action(text: str) -> str | None:
+    """Return the forbidden action family a recommendation appears to request, if any."""
+    norm=re.sub(r'\s+',' ',re.sub(r'[^a-z0-9$]+',' ',text.casefold().replace('_',' '))).strip()
+    for action,patterns in _FORBIDDEN_PATTERNS.items():
+        if any(re.search(p,norm) for p in patterns):
+            return action
+    return None
 
 class MunicipalCore:
     def __init__(self, store: Store):
@@ -138,15 +166,26 @@ class MunicipalCore:
                 'note':'Matching text is not proof of semantic truth, legal applicability, or source authenticity'}
 
     def service_spikes(self, csv_path: str | Path, *, actor: str='local_operator',
-                       as_of: str | None = None) -> list[dict]:
+                       as_of: str | None = None, method: str='v2') -> list[dict]:
+        """Area-level spike scan. v2 (default): count model + seasonality + FDR control.
+        v1 is kept only for comparison with earlier results."""
         actor=checked(actor,'actor',120)
         rows=load_requests(str(csv_path))
-        flags=[asdict(x) for x in spikes(rows,SpikeRule(),date.fromisoformat(as_of) if as_of else None)]
-        if flags:
-            with self.store.write() as conn:
-                self.store.append(conn,'service_spike_scan',{'actor':actor,'flags':flags,
-                    'input_hash':digest(Path(csv_path).read_text('utf-8')),
-                    'warning':'Area-level statistical signals only; not predictions of individuals'})
+        when=date.fromisoformat(as_of) if as_of else None
+        if method=='v2':
+            found,summary=spikes_v2(rows,SpikeRuleV2(),when)
+            flags=[asdict(x) for x in found]
+        elif method=='v1':
+            flags=[asdict(x) for x in spikes(rows,SpikeRule(),when)]
+            summary={'rule':'SPIKE-v1','flags':len(flags),
+                     'caution':'v1 has no multiple-testing correction or seasonality; expect false alarms'}
+        else:
+            raise ValueError('method must be v2 or v1')
+        # Every scan is recorded, including scans that found nothing (absence of flags is also a result).
+        with self.store.write() as conn:
+            self.store.append(conn,'service_spike_scan',{'actor':actor,'flags':flags,'summary':summary,
+                'input_hash':digest(Path(csv_path).read_text('utf-8')),
+                'warning':'Area-level statistical signals only; not predictions of individuals'})
         return flags
 
     def propose(self, *, proposed_by: str, recommendation: str, evidence_refs: list[str]) -> dict:
@@ -157,9 +196,12 @@ class MunicipalCore:
         refs=[checked(item,'evidence_ref',250) for item in evidence_refs]
         if not refs:
             raise ValueError('Recommendations need at least one evidence reference')
-        text_lower=recommendation.lower()
-        if any(forbidden.replace('_',' ') in text_lower for forbidden in FORBIDDEN_ACTIONS):
-            raise ValueError('Request names an action that cannot be performed by AXIOM0')
+        blocked=forbidden_action(recommendation)
+        if blocked:
+            raise ValueError(f'Recommendation appears to request a prohibited action ({blocked}). '
+                             'AXIOM0 can only recommend human follow-up (inspect, review, notify, schedule); '
+                             'enforcement, spending, record changes and person-level scoring stay with '
+                             'authorized officials outside AXIOM0.')
         id_=str(uuid.uuid4()); stamp=now()
         with self.store.write() as conn:
             conn.execute('''INSERT INTO action_queue(id,proposed_at,proposed_by,recommendation,evidence_json,status)
@@ -183,7 +225,8 @@ class MunicipalCore:
                               (int(include_reviewed),)).fetchall()
         return [self.queue_entry(r['id']) for r in rows]
 
-    def review(self, id_:str, *, reviewer: str, decision: str, rationale: str) -> dict:
+    def review(self, id_:str, *, reviewer: str, decision: str, rationale: str,
+               reviewer_auth: str='local_label') -> dict:
         reviewer=checked(reviewer,'reviewer',120)
         rationale=checked(rationale,'rationale',1500)
         if decision not in ('approved_for_human_followup','rejected'):
@@ -197,7 +240,7 @@ class MunicipalCore:
             stamp=now()
             conn.execute('''UPDATE action_queue SET status=?,reviewed_at=?,reviewed_by=?,review_note=? WHERE id=?''',
                          (decision,stamp,reviewer,rationale,id_))
-            self.store.append(conn,'action_reviewed',{'id':id_,'reviewed_by':reviewer,
+            self.store.append(conn,'action_reviewed',{'id':id_,'reviewed_by':reviewer,'reviewer_auth':reviewer_auth,
                 'decision':decision,'rationale':rationale,
                 'note':'Human follow-up only; does not authorize enforcement or expenditure'})
         return self.queue_entry(id_)
